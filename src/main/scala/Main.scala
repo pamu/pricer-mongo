@@ -260,7 +260,7 @@ object Main {
         "kms" -> kms,
         "fair_price" -> fair,
         "good_price" -> good,
-        "good_excellent" -> excellent
+        "excellent_price" -> excellent
       )
     }
   }
