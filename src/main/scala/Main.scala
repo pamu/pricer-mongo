@@ -76,7 +76,7 @@ object Main {
     "Mumbai" -> 1,
     "Bangalore" -> 2,
     "Chennai" -> 3,
-    "Delhi" -> 4,
+    "New Delhi" -> 4,
     "Pune" -> 5
   )
 
