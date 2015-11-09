@@ -255,7 +255,9 @@ object Main {
   }
 
   def dumpToMongo(makesModels: String, modelsVersions: String, cities: String): Unit = {
-    val mongoClient = MongoClient()
+
+    //change the mongo host port
+    val mongoClient = MongoClient(host = "localhost", port = 27017)
 
     val zoomo = mongoClient("zoomo")
 
@@ -276,7 +278,8 @@ object Main {
   def dumpPricerData(filename: File): Unit  = {
     val lines = Source.fromFile(getTempFile(filename)).getLines()
 
-    val mongoClient = MongoClient()
+    //change the mongo host port
+    val mongoClient = MongoClient(host = "localhost", port = 27017)
     val zoomo = mongoClient("zoomo")
 
     lines.foreach { line =>
@@ -308,35 +311,5 @@ object Main {
     }
 
     mongoClient.close()
-  }
-
-  def pricerData(filename: File): Unit = {
-    val lines = Source.fromFile(getTempFile(filename)).getLines()
-    lines.foreach { line =>
-      val cols = line.split("    ").map(_.trim)
-      val year = cols(0).toInt
-      val make = cols(1)
-      val model = cols(2)
-      val version = cols(3).toInt
-      val city = cols(4).toInt
-      val month = cols(5)
-      val kms = cols(6).toInt
-      val fair = cols(7).toInt
-      val good = cols(8).toInt
-      val excellent = cols(9).toInt
-
-      val data = Json.obj(
-        "year" -> year,
-        "make" -> make,
-        "model" -> model,
-        "version" -> version,
-        "city" -> city,
-        "month" -> month,
-        "kms" -> kms,
-        "fair_price" -> fair,
-        "good_price" -> good,
-        "excellent_price" -> excellent
-      )
-    }
   }
 }
