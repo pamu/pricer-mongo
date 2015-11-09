@@ -1,4 +1,4 @@
-import java.io.{File, PrintWriter}
+import java.io.{FilenameFilter, File, PrintWriter}
 
 import com.mongodb.casbah.MongoClient
 import com.mongodb.util.JSON
@@ -14,20 +14,62 @@ import com.mongodb.casbah.TypeImports.DBObject
   */
 object Main {
   def main(args: Array[String]): Unit = {
-    println(getMaps.toString())
-        val maps = getMaps()
-        val a = maps._1
-        val b = maps._2
 
-    //replaceString(keyValues, cities)
+    if (args.length != 1) {
+      println(s"Please give data folder path")
+      sys.exit()
+    }
 
-    //println(Json.prettyPrint(Json.toJson(a)))
+    println(s"Command line argument ${args(0)}")
 
-    dumpToMongo(Json.toJson(a).toString(), Json.toJson(b).toString(), Json.toJson(cities.map(_.swap)).toString())
+    val dataFolder = new File(args(0))
+
+    if (! dataFolder.exists()) {
+      println(s"Folder doesn't exist")
+      sys.exit()
+    } else {
+      println(s"Data Folder exists")
+    }
+
+
+    val folders = dataFolder.listFiles().toList
+
+    folders.foreach { folder =>
+      if (folder.isDirectory) {
+        val fileList = folder.listFiles(new FilenameFilter {
+          override def accept(dir: File, name: String): Boolean = {
+            name.contains(".csv")
+          }
+        }).toList
+        println(s"processing ${folder.getName} data")
+        fileList.foreach { file =>
+          if (file.isFile) {
+            println(s"processing ${file.getName} file")
+            process(file)
+          }
+        }
+      } else {
+        println(s"ignoring an item because its a file named ${folder.getPath}")
+      }
+    }
+   }
+
+  def process(filename: File): Unit = {
+    replaceString(filename, keyValues(filename), cities)
+
+    val maps = getMaps(filename)
+    val a = maps._1
+    val b = maps._2
+
+    dumpToMongo(filename, Json.toJson(a).toString(), Json.toJson(b).toString(), Json.toJson(cities.map(_.swap)).toString())
   }
 
   def cities = Map(
-    "Mumbai" -> 1
+    "Mumbai" -> 1,
+    "Bangalore" -> 2,
+    "Chennai" -> 3,
+    "Delhi" -> 4,
+    "Pune" -> 5
   )
 
   implicit val cityWrites: Writes[Map[Int, String]] = new Writes[Map[Int, String]] {
@@ -35,42 +77,42 @@ object Main {
       Json.obj(
         "list" ->
           Json.toJson(
-          o.map { pair =>
-            Json.obj("id" -> pair._1, "name" -> pair._2)
-          }
-        )
+            o.map { pair =>
+              Json.obj("id" -> pair._1, "name" -> pair._2)
+            }
+          )
       )
     }
   }
   implicit val makeWrites: Writes[Make] = (
     (JsPath \ "name").write[String] and
       (JsPath \ "id").write[Int]
-    )(unlift(Make.unapply _))
+    ) (unlift(Make.unapply _))
 
   implicit val modelWrites: Writes[Model] = (
     (JsPath \ "name").write[String] and
       (JsPath \ "id").write[Int]
-    )(unlift(Model.unapply _))
+    ) (unlift(Model.unapply _))
 
   implicit val versionWrites: Writes[Version] = (
     (JsPath \ "name").write[String] and
       (JsPath \ "id").write[Int]
-    )(unlift(Version.unapply _))
+    ) (unlift(Version.unapply _))
 
-  implicit  val mapMakesWrites: Writes[scala.collection.mutable.Map[Make, Set[Model]]] = new Writes[mutable.Map[Make, Set[Model]]] {
+  implicit val mapMakesWrites: Writes[scala.collection.mutable.Map[Make, Set[Model]]] = new Writes[mutable.Map[Make, Set[Model]]] {
     override def writes(o: mutable.Map[Make, Set[Model]]): JsValue = {
       Json.obj(
         "list" ->
           Json.toJson {
-          o.map { pair =>
-            Json.obj("make" -> Json.toJson(pair._1), "models" -> Json.toJson(pair._2))
-          }.toList
-        }
+            o.map { pair =>
+              Json.obj("make" -> Json.toJson(pair._1), "models" -> Json.toJson(pair._2))
+            }.toList
+          }
       )
     }
   }
 
-  implicit  val mapModelsWrites: Writes[scala.collection.mutable.Map[Model, Set[Version]]] = new Writes[mutable.Map[Model, Set[Version]]] {
+  implicit val mapModelsWrites: Writes[scala.collection.mutable.Map[Model, Set[Version]]] = new Writes[mutable.Map[Model, Set[Version]]] {
     override def writes(o: mutable.Map[Model, Set[Version]]): JsValue = {
       Json.obj(
         "list" -> Json.toJson {
@@ -83,11 +125,14 @@ object Main {
   }
 
   case class Make(name: String, id: Int)
+
   case class Model(name: String, id: Int)
+
   case class Version(name: String, id: Int)
 
-  def getMaps(): (scala.collection.mutable.Map[Make, Set[Model]], scala.collection.mutable.Map[Model, Set[Version]]) = {
-    val lines = Source.fromInputStream(getClass.getResourceAsStream("make-model-version.csv")).getLines()
+  def getMaps(fileName: File): (scala.collection.mutable.Map[Make, Set[Model]], scala.collection.mutable.Map[Model, Set[Version]]) = {
+    println(s"filename ${fileName.getName}")
+    val lines = Source.fromFile(getTempFile(fileName), "UTF-8").getLines()
 
     val makeModels = scala.collection.mutable.Map[Make, Set[Model]]()
     val modelVersions = scala.collection.mutable.Map[Model, Set[Version]]()
@@ -130,8 +175,8 @@ object Main {
     (makeModels -> modelVersions)
   }
 
-  def keyValues: scala.collection.mutable.Map[String, Int] = {
-    val lines = Source.fromInputStream(getClass.getResourceAsStream("make-model-version.csv")).getLines()
+  def keyValues(filename: File): scala.collection.mutable.Map[String, Int] = {
+    val lines = Source.fromInputStream(getClass.getResourceAsStream("make-model-version.csv"), "UTF-8").getLines()
 
     val map = scala.collection.mutable.Map[String, Int]()
 
@@ -159,9 +204,15 @@ object Main {
     map
   }
 
-  def replaceString(map: scala.collection.mutable.Map[String, Int], cities: Map[String, Int]):  Unit = {
-    val lines = Source.fromInputStream(getClass.getResourceAsStream("mumbai_data.csv")).getLines()
-    val writer = new PrintWriter(new File(s"${sys.props.get("user.home").get}/Desktop/mumbai_data_processed.csv"))
+  def getTempFile(filename: File): File = {
+    val folder = filename.getParentFile
+    new File(folder, folder.getName + "_processed.csv")
+  }
+
+  def replaceString(filename: File, map: scala.collection.mutable.Map[String, Int], cities: Map[String, Int]): Unit = {
+    val lines = Source.fromFile(filename, "UTF-8").getLines()
+    val file = getTempFile(filename)
+    val writer = new PrintWriter(file)
     lines.foreach { line =>
       val newLine = createNewLine(line, map, cities)
       writer.println(newLine)
@@ -188,7 +239,7 @@ object Main {
     s"$year$fs${map(make)}$fs${map(model)}$fs${map(version)}$fs${cities(city)}$fs$month$fs$kms$fs$fair$fs$good$fs$excellent"
   }
 
-  def dumpToMongo(makesModels: String, modelsVersions: String, cities: String): Unit = {
+  def dumpToMongo(filename: File, makesModels: String, modelsVersions: String, cities: String): Unit = {
     val mongoClient = MongoClient()
 
     val zoomo = mongoClient("zoomo")
@@ -203,7 +254,7 @@ object Main {
       zoomo("pricer_cities").insert(JSON.parse(json.toString).asInstanceOf[DBObject])
     }
 
-    val lines = Source.fromFile(new File(s"${sys.props.get("user.home").get}/Desktop/mumbai_data_processed.csv")).getLines()
+    val lines = Source.fromFile(getTempFile(filename)).getLines()
     lines.foreach { line =>
       val cols = line.split("    ").map(_.trim)
       val year = cols(0).toInt
@@ -217,7 +268,7 @@ object Main {
       val good = cols(8).toInt
       val excellent = cols(9).toInt
 
-      val data  = Json.obj(
+      val data = Json.obj(
         "year" -> year,
         "make" -> make,
         "model" -> model,
@@ -235,8 +286,8 @@ object Main {
 
   }
 
-  def pricerData(): Unit = {
-    val lines = Source.fromFile(new File(s"${sys.props.get("user.home").get}/Desktop/mumbai_data_processed.csv")).getLines()
+  def pricerData(filename: File): Unit = {
+    val lines = Source.fromFile(getTempFile(filename)).getLines()
     lines.foreach { line =>
       val cols = line.split("    ").map(_.trim)
       val year = cols(0).toInt
@@ -250,7 +301,7 @@ object Main {
       val good = cols(8).toInt
       val excellent = cols(9).toInt
 
-      val data  = Json.obj(
+      val data = Json.obj(
         "year" -> year,
         "make" -> make,
         "model" -> model,
