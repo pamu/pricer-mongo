@@ -34,6 +34,14 @@ object Main {
 
     val folders = dataFolder.listFiles().toList
 
+    val maps = getMaps
+    val a = maps._1
+    val b = maps._2
+
+    dumpToMongo(Json.toJson(a).toString(), Json.toJson(b).toString(), Json.toJson(cities.map(_.swap)).toString())
+
+
+
     folders.foreach { folder =>
       if (folder.isDirectory) {
         val fileList = folder.listFiles(new FilenameFilter {
@@ -56,12 +64,7 @@ object Main {
 
   def process(filename: File): Unit = {
     replaceString(filename, keyValues(filename), cities)
-
-    val maps = getMaps(filename)
-    val a = maps._1
-    val b = maps._2
-
-    dumpToMongo(filename, Json.toJson(a).toString(), Json.toJson(b).toString(), Json.toJson(cities.map(_.swap)).toString())
+    dumpPricerData(filename)
   }
 
   def cities = Map(
@@ -130,9 +133,9 @@ object Main {
 
   case class Version(name: String, id: Int)
 
-  def getMaps(fileName: File): (scala.collection.mutable.Map[Make, Set[Model]], scala.collection.mutable.Map[Model, Set[Version]]) = {
-    println(s"filename ${fileName.getName}")
-    val lines = Source.fromFile(getTempFile(fileName), "UTF-8").getLines()
+  def getMaps: (scala.collection.mutable.Map[Make, Set[Model]], scala.collection.mutable.Map[Model, Set[Version]]) = {
+
+    val lines = Source.fromInputStream(getClass.getResourceAsStream("make-model-version.csv"), "UTF-8").getLines()
 
     val makeModels = scala.collection.mutable.Map[Make, Set[Model]]()
     val modelVersions = scala.collection.mutable.Map[Model, Set[Version]]()
@@ -195,9 +198,15 @@ object Main {
       val version = vDust(0)
       val versionId = vDust(1)
 
-      map += (make -> makeId.toInt)
-      map += (model -> modelId.toInt)
-      map += (version -> versionId.toInt)
+      if (model == "Land Cruiser") {
+        map += (make -> makeId.toInt)
+        map += ("Land Cruiser [2011-2015]" -> modelId.toInt)
+        map += (version -> versionId.toInt)
+      } else {
+        map += (make -> makeId.toInt)
+        map += (model -> modelId.toInt)
+        map += (version -> versionId.toInt)
+      }
     }
 
     lines.foreach(processLine(_))
@@ -207,6 +216,11 @@ object Main {
   def getTempFile(filename: File): File = {
     val folder = filename.getParentFile
     new File(folder, folder.getName + "_processed.csv")
+  }
+
+  def getIdsFile(filename: File): File = {
+    val folder = filename.getParentFile
+    new File(folder, folder.getName + "_processed-ids.csv")
   }
 
   def replaceString(filename: File, map: scala.collection.mutable.Map[String, Int], cities: Map[String, Int]): Unit = {
@@ -234,12 +248,14 @@ object Main {
     val good = cols(8)
     val excellent = cols(9)
 
+    println(s"$year $make $model $version $city $month $kms $fair $good $excellent")
+
     val fs = "    "
 
     s"$year$fs${map(make)}$fs${map(model)}$fs${map(version)}$fs${cities(city)}$fs$month$fs$kms$fs$fair$fs$good$fs$excellent"
   }
 
-  def dumpToMongo(filename: File, makesModels: String, modelsVersions: String, cities: String): Unit = {
+  def dumpToMongo(makesModels: String, modelsVersions: String, cities: String): Unit = {
     val mongoClient = MongoClient()
 
     val zoomo = mongoClient("zoomo")
@@ -254,7 +270,16 @@ object Main {
       zoomo("pricer_cities").insert(JSON.parse(json.toString).asInstanceOf[DBObject])
     }
 
+    mongoClient.close()
+
+  }
+
+  def dumpPricerData(filename: File): Unit  = {
     val lines = Source.fromFile(getTempFile(filename)).getLines()
+
+    val mongoClient = MongoClient()
+    val zoomo = mongoClient("zoomo")
+
     lines.foreach { line =>
       val cols = line.split("    ").map(_.trim)
       val year = cols(0).toInt
@@ -280,10 +305,10 @@ object Main {
         "good_price" -> good,
         "good_excellent" -> excellent
       )
-
       zoomo("pricer_data").insert(JSON.parse(data.toString).asInstanceOf[DBObject])
     }
 
+    mongoClient.close()
   }
 
   def pricerData(filename: File): Unit = {
