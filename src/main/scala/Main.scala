@@ -31,6 +31,11 @@ object Main {
       println(s"Data Folder exists")
     }
 
+    // Enable MongoDB logging in general
+    System.setProperty("DEBUG.MONGO", "true");
+
+    // Enable DB operation tracing
+    System.setProperty("DB.TRACE", "true");
 
     val folders = dataFolder.listFiles().toList
 
@@ -191,22 +196,16 @@ object Main {
       val makeId = mDust(1)
       val models = dust(2)
       val moDust = models.split(",").map(_.trim)
-      val model = moDust(0)
+      val model =  moDust(0)
       val modelId = moDust(1)
       val versions = dust(3)
       val vDust = versions.split(",").map(_.trim)
       val version = vDust(0)
       val versionId = vDust(1)
 
-      if (model == "Land Cruiser") {
-        map += (make -> makeId.toInt)
-        map += ("Land Cruiser [2011-2015]" -> modelId.toInt)
-        map += (version -> versionId.toInt)
-      } else {
-        map += (make -> makeId.toInt)
-        map += (model -> modelId.toInt)
-        map += (version -> versionId.toInt)
-      }
+      map += (make -> makeId.toInt)
+      map += (model -> modelId.toInt)
+      map += (version -> versionId.toInt)
     }
 
     lines.foreach(processLine(_))
@@ -239,7 +238,7 @@ object Main {
     val cols = line.split("    ").map(_.trim)
     val year = cols(0)
     val make = cols(1)
-    val model = cols(2)
+    val model = if (cols(2) == "Land Cruiser") "Land Cruiser [2011-2015]" else cols(2)
     val version = cols(3)
     val city = cols(4)
     val month = cols(5)
@@ -248,7 +247,7 @@ object Main {
     val good = cols(8)
     val excellent = cols(9)
 
-    println(s"$year $make $model $version $city $month $kms $fair $good $excellent")
+    //println(s"$year $make $model $version $city $month $kms $fair $good $excellent")
 
     val fs = "    "
 
